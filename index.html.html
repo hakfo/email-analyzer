@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phishing Email Analyzer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2230;
+    --border: #2d333b;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --high: #f85149;
+    --medium: #d29922;
+    --low: #58a6ff;
+    --info: #3fb950;
+    --green: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #11161f 0%, var(--bg) 100%);
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .3px; }
+  header h1 .shield { color: var(--accent); }
+  header p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  textarea {
+    width: 100%;
+    height: 360px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: .15s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.1); }
+  .meta { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+  .meta b { color: var(--text); font-weight: 600; }
+  .gauge {
+    display: flex; align-items: center; gap: 18px;
+    padding: 16px; border-radius: 10px; margin-bottom: 16px;
+    background: var(--panel-2); border: 1px solid var(--border);
+  }
+  .score-circle {
+    width: 86px; height: 86px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 700; flex-shrink: 0;
+    background: conic-gradient(var(--ring) calc(var(--pct) * 1%), #21262d 0);
+    position: relative;
+  }
+  .score-circle::after {
+    content: ""; position: absolute; inset: 8px; border-radius: 50%; background: var(--panel-2);
+  }
+  .score-circle span { position: relative; z-index: 1; }
+  .verdict-text { font-size: 16px; font-weight: 600; }
+  .verdict-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  ul.findings { list-style: none; margin: 0; padding: 0; }
+  ul.findings li {
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: var(--bg);
+  }
+  li.high { border-left-color: var(--high); }
+  li.medium { border-left-color: var(--medium); }
+  li.low { border-left-color: var(--low); }
+  li.info { border-left-color: var(--info); }
+  .tag {
+    display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .5px;
+    padding: 2px 7px; border-radius: 5px; text-transform: uppercase; margin-right: 8px;
+  }
+  .tag.high { background: rgba(248,81,73,.18); color: var(--high); }
+  .tag.medium { background: rgba(210,153,34,.18); color: var(--medium); }
+  .tag.low { background: rgba(88,166,255,.18); color: var(--low); }
+  .tag.info { background: rgba(63,185,80,.18); color: var(--info); }
+  .cat { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .fmsg { font-size: 13.5px; margin-top: 3px; }
+  .fdetail { font-size: 12px; color: var(--muted); margin-top: 3px; word-break: break-all; font-family: monospace; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 0; }
+  footer { text-align: center; color: var(--muted); font-size: 11.5px; padding: 16px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="shield">&#128737;</span> Phishing Email Analyzer</h1>
+  <p>Plak een ruwe e-mail (headers + body of een .eml). Alle analyse draait lokaal in je browser — er wordt niets verstuurd.</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Ruwe e-mail</h2>
+    <textarea id="input" placeholder="Plak hier de volledige e-mailbron (View source / Show original / .eml-inhoud)..."></textarea>
+    <div class="row">
+      <button class="primary" onclick="run()">Analyseer</button>
+      <button onclick="loadSample()">Laad voorbeeld</button>
+      <button onclick="clearAll()">Wissen</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Rapport</h2>
+    <div id="report">
+      <div class="empty">Nog geen analyse. Plak een e-mail of klik &ldquo;Laad voorbeeld&rdquo;.</div>
+    </div>
+  </div>
+</div>
+
+<footer>Client-side heuristiek &mdash; geen vervanging voor een echte secure email gateway. Gebouwd voor leerdoeleinden.</footer>
+
+<script>
+"use strict";
+
+const SEVERITY_WEIGHTS = { info: 0, low: 10, medium: 25, high: 40 };
+
+const BRAND_KEYWORDS = [
+  "microsoft","office365","outlook","paypal","apple","amazon","google","netflix",
+  "bank","ing","rabobank","abnamro","dhl","postnl","belastingdienst","linkedin",
+  "facebook","instagram"
+];
+
+const SOCIAL_ENGINEERING = [
+  "verify your account","verify your identity","confirm your password",
+  "update your payment","your account has been suspended","unusual activity",
+  "click here immediately","within 24 hours","act now","final warning",
+  "you have won","claim your prize","limited time","reset your password",
+  "validate your account","account will be closed","security alert",
+  "verifieer uw account","bevestig uw wachtwoord","uw account is geblokkeerd",
+  "ongebruikelijke activiteit","klik hier","binnen 24 uur","direct handelen",
+  "u heeft gewonnen","laatste waarschuwing","betalingsgegevens bijwerken",
+  "account wordt opgeheven","verifieer uw identiteit"
+];
+
+const RISKY_EXT = [".exe",".scr",".js",".vbs",".jar",".bat",".cmd",".com",".pif",
+  ".hta",".lnk",".iso",".img",".msi",".ps1",".docm",".xlsm",".pptm"];
+
+const SHORTENERS = ["bit.ly","tinyurl.com","goo.gl","t.co","ow.ly","is.gd","buff.ly",
+  "rebrand.ly","cutt.ly","shorturl.at"];
+
+const URL_RE = /https?:\/\/[^\s"'<>)\]]+/gi;
+
+// ---- parsing -------------------------------------------------------------
+
+function parseEmail(raw) {
+  raw = raw.replace(/\r\n/g, "\n");
+  const split = raw.indexOf("\n\n");
+  const headerBlock = split === -1 ? raw : raw.slice(0, split);
+  const body = split === -1 ? "" : raw.slice(split + 2);
+
+  // unfold headers (continuation lines start with whitespace)
+  const unfolded = headerBlock.replace(/\n[ \t]+/g, " ");
+  const headers = {};
+  unfolded.split("\n").forEach(line => {
+    const i = line.indexOf(":");
+    if (i > 0) {
+      const key = line.slice(0, i).trim().toLowerCase();
+      const val = line.slice(i + 1).trim();
+      headers[key] = headers[key] ? headers[key] + " " + val : val;
+    }
+  });
+  return { headers, body };
+}
+
+function parseAddr(value) {
+  if (!value) return { name: "", addr: "" };
+  const m = value.match(/^(.*?)<([^>]+)>\s*$/);
+  if (m) return { name: m[1].replace(/["']/g, "").trim(), addr: m[2].trim().toLowerCase() };
+  return { name: "", addr: value.trim().toLowerCase() };
+}
+
+function domainOf(value) {
+  if (!value) return "";
+  value = value.trim().replace(/^<|>$/g, "");
+  if (value.includes("@") && !value.includes("://")) return value.split("@").pop().toLowerCase();
+  try { return new URL(value).hostname.toLowerCase(); } catch (e) { return ""; }
+}
+
+function registrable(domain) {
+  const p = domain.split(".");
+  return p.length >= 2 ? p.slice(-2).join(".") : domain;
+}
+
+// ---- analysis ------------------------------------------------------------
+
+function analyze(raw) {
+  const { headers, body } = parseEmail(raw);
+  const findings = [];
+  const add = (severity, category, message, detail = "") =>
+    findings.push({ severity, category, message, detail });
+
+  const from = parseAddr(headers["from"]);
+  const fromDomain = domainOf(from.addr);
+
+  // strip a quoted-printable-ish body lightly + detect html
+  const isHtml = /<\/?[a-z][\s\S]*>/i.test(body);
+  const text = body;
+
+  // --- auth ---
+  const authBlob = ((headers["authentication-results"] || "") + " " +
+                    (headers["received-spf"] || "")).toLowerCase();
+  if (!authBlob.trim()) {
+    add("low","auth","Geen authenticatie-headers aanwezig","Server registreerde geen SPF/DKIM/DMARC-resultaat.");
+  } else {
+    [["spf","SPF"],["dkim","DKIM"],["dmarc","DMARC"]].forEach(([m,label]) => {
+      if (authBlob.includes(m+"=fail") || authBlob.includes(m+"=softfail"))
+        add("high","auth",label+" mislukt","Afzenderauthenticatie faalde — sterk spoofing-signaal.");
+      else if (authBlob.includes(m+"=pass")) add("info","auth",label+" geslaagd");
+      else if (authBlob.includes(m+"=none")) add("low","auth",label+" niet geconfigureerd");
+    });
+  }
+
+  // --- sender ---
+  const nameLc = from.name.toLowerCase();
+  for (const brand of BRAND_KEYWORDS) {
+    if (nameLc.includes(brand) && !fromDomain.includes(brand)) {
+      add("high","sender",`Weergavenaam noemt "${brand}" maar domein is ${fromDomain || "onbekend"}`,
+          "Klassiek merk-imitatiepatroon.");
+      break;
+    }
+  }
+  const reply = parseAddr(headers["reply-to"]);
+  if (reply.addr && domainOf(reply.addr) && domainOf(reply.addr) !== fromDomain)
+    add("medium","sender",`Reply-To-domein (${domainOf(reply.addr)}) wijkt af van From (${fromDomain})`,
+        "Antwoorden gaan naar een andere partij dan de schijnbare afzender.");
+  const ret = parseAddr(headers["return-path"]);
+  if (ret.addr && domainOf(ret.addr) && fromDomain &&
+      registrable(domainOf(ret.addr)) !== registrable(fromDomain))
+    add("low","sender",`Return-Path-domein (${domainOf(ret.addr)}) wijkt af van From (${fromDomain})`);
+
+  // --- urls ---
+  const urls = new Set();
+  (text.match(URL_RE) || []).forEach(u => urls.add(u));
+
+  const linkPairs = [];
+  if (isHtml) {
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    doc.querySelectorAll("a[href]").forEach(a => {
+      const href = a.getAttribute("href");
+      if (href && /^https?:/i.test(href)) {
+        urls.add(href);
+        linkPairs.push({ href, txt: (a.textContent || "").trim() });
+      }
+    });
+    if (doc.querySelector("form[action]"))
+      add("medium","content","E-mailbody bevat een HTML-formulier",
+          "Formulieren in e-mail zijn een veelgebruikte methode om inloggegevens te oogsten.");
+  }
+
+  urls.forEach(url => {
+    const d = domainOf(url), reg = registrable(d);
+    if (SHORTENERS.includes(reg)) add("medium","url",`Verkorte link verbergt bestemming: ${d}`, url);
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(d)) add("high","url",`Link wijst naar een ruw IP-adres: ${d}`, url);
+    for (const brand of BRAND_KEYWORDS) {
+      if (d.includes(brand) && !reg.startsWith(brand)) {
+        add("high","url",`Lookalike-domein imiteert "${brand}": ${d}`, url); break;
+      }
+    }
+    if (d.includes("xn--")) add("high","url",`Punycode (mogelijk homoglief) domein: ${d}`, url);
+    if ((d.match(/\./g) || []).length >= 4) add("low","url",`Ongewoon diepe subdomeinketen: ${d}`, url);
+  });
+
+  linkPairs.forEach(({ href, txt }) => {
+    const shownUrls = txt.match(URL_RE);
+    if (shownUrls) {
+      const shown = registrable(domainOf(shownUrls[0]));
+      const actual = registrable(domainOf(href));
+      if (shown && actual && shown !== actual)
+        add("high","url",`Linktekst toont ${shown} maar gaat naar ${actual}`,`tekst=${txt} href=${href}`);
+    }
+  });
+
+  // --- body language ---
+  const corpus = (text.replace(/<[^>]+>/g, " ")).toLowerCase();
+  const hits = SOCIAL_ENGINEERING.filter(p => corpus.includes(p));
+  if (hits.length) {
+    const sev = hits.length >= 2 ? "medium" : "low";
+    add(sev,"content",`Social-engineering-taal gedetecteerd (${hits.length} zin(nen))`,
+        [...new Set(hits)].slice(0,6).join("; "));
+  }
+
+  // --- attachments (best effort from headers) ---
+  const fnameMatches = raw.match(/filename\*?=["']?([^"'\n;]+)/gi) || [];
+  fnameMatches.forEach(fm => {
+    const fname = fm.replace(/filename\*?=["']?/i, "").trim();
+    const lower = fname.toLowerCase();
+    const ext = lower.includes(".") ? "." + lower.split(".").pop() : "";
+    if (RISKY_EXT.includes(ext)) add("high","attachment",`Riskant bijlagetype: ${fname}`,`Extensie ${ext} kan code uitvoeren.`);
+    if (/\.\w{2,4}\.(exe|scr|js|vbs|bat|cmd|hta|lnk)$/.test(lower))
+      add("high","attachment",`Dubbele-extensie bijlage: ${fname}`);
+  });
+
+  const score = Math.min(100, findings.reduce((s,f) => s + (SEVERITY_WEIGHTS[f.severity]||0), 0));
+  let verdict, sub;
+  if (score >= 60) { verdict = "HOOG RISICO"; sub = "Zeer waarschijnlijk phishing"; }
+  else if (score >= 30) { verdict = "VERDACHT"; sub = "Voorzichtig behandelen"; }
+  else if (score >= 10) { verdict = "LAAG RISICO"; sub = "Kleine afwijkingen"; }
+  else { verdict = "SCHOON"; sub = "Geen sterke indicatoren"; }
+
+  return {
+    meta: { from: headers["from"] || "—", subject: headers["subject"] || "—", date: headers["date"] || "—" },
+    score, verdict, sub, findings
+  };
+}
+
+// ---- rendering -----------------------------------------------------------
+
+function ringColor(score) {
+  if (score >= 60) return "var(--high)";
+  if (score >= 30) return "var(--medium)";
+  if (score >= 10) return "var(--low)";
+  return "var(--green)";
+}
+
+function render(r) {
+  const order = { high: 0, medium: 1, low: 2, info: 3 };
+  const sorted = [...r.findings].sort((a,b) => (order[a.severity]??9) - (order[b.severity]??9));
+  const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+  let items = sorted.length
+    ? sorted.map(f => `
+        <li class="${f.severity}">
+          <span class="tag ${f.severity}">${f.severity}</span>
+          <span class="cat">${esc(f.category)}</span>
+          <div class="fmsg">${esc(f.message)}</div>
+          ${f.detail ? `<div class="fdetail">${esc(f.detail)}</div>` : ""}
+        </li>`).join("")
+    : `<div class="empty">Geen indicatoren gevonden.</div>`;
+
+  document.getElementById("report").innerHTML = `
+    <div class="meta">
+      <div><b>Van:</b> ${esc(r.meta.from)}</div>
+      <div><b>Onderwerp:</b> ${esc(r.meta.subject)}</div>
+      <div><b>Datum:</b> ${esc(r.meta.date)}</div>
+    </div>
+    <div class="gauge" style="--ring:${ringColor(r.score)};--pct:${r.score}">
+      <div class="score-circle"><span>${r.score}</span></div>
+      <div>
+        <div class="verdict-text" style="color:${ringColor(r.score)}">${r.verdict}</div>
+        <div class="verdict-sub">${r.sub} &middot; score ${r.score}/100</div>
+      </div>
+    </div>
+    <ul class="findings">${items}</ul>`;
+}
+
+function run() {
+  const raw = document.getElementById("input").value.trim();
+  if (!raw) { document.getElementById("report").innerHTML =
+    `<div class="empty">Plak eerst een e-mail.</div>`; return; }
+  render(analyze(raw));
+}
+
+function clearAll() {
+  document.getElementById("input").value = "";
+  document.getElementById("report").innerHTML =
+    `<div class="empty">Nog geen analyse.</div>`;
+}
+
+const SAMPLE = `From: Microsoft Account Team <security@account-microsoft-verify.com>
+Reply-To: no-reply@mailgun-track.ru
+Return-Path: <bounce@account-microsoft-verify.com>
+To: kevin.hemelrijk@fellowminds.nl
+Subject: Security alert: unusual activity on your account
+Date: Tue, 02 Jun 2026 03:14:00 +0000
+Authentication-Results: mx.fellowminds.nl; spf=fail smtp.mailfrom=account-microsoft-verify.com; dkim=none; dmarc=fail
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<p>Dear user,</p>
+<p>We detected <b>unusual activity</b> on your account. You must
+<b>verify your identity</b> within 24 hours or your account will be closed.</p>
+<p><a href="http://198.51.100.23/login/office365/verify">https://login.microsoftonline.com/verify</a></p>
+<p>Click here immediately to secure your account.</p>
+</body></html>`;
+
+function loadSample() {
+  document.getElementById("input").value = SAMPLE;
+  run();
+}
+</script>
+</body>
+</html>
